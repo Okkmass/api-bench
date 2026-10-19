@@ -17,24 +17,23 @@ messages_bench.py — /v1/messages (Claude 原生格式) 端点测试工具。
 
 用法:
   # 一页 HTML 报告（首字 + 缓存），并发 100
-  python3 messages_bench.py --url https://你的网关/v1/messages --token sk-xxxx --model glm-5.2 \
+  python3 messages_bench.py --url https://你的网关/v1/messages --token sk-xxxx --model claude-sonnet-4-5 \
       report --concurrency 100 --html report.html
 
   # 压测：并发 10，共 50 请求，导出 CSV
   python3 messages_bench.py \
-      --url https://你的网关/v1/messages --token sk-xxxx --model glm-5.2 \
+      --url https://你的网关/v1/messages --token sk-xxxx --model claude-sonnet-4-5 \
       bench --concurrency 10 --requests 50 --csv result.csv
 
   # 压测：按固定速率 5 req/s 压 100 个（Poisson 到达）
-  python3 messages_bench.py --url ... --token ... --model glm-5.2 \
+  python3 messages_bench.py --url ... --token ... --model claude-sonnet-4-5 \
       bench --request-rate 5 --requests 100
 
   # 缓存：同一前缀发 5 次
-  python3 messages_bench.py --url ... --token ... --model glm-5.2 \
+  python3 messages_bench.py --url ... --token ... --model claude-sonnet-4-5 \
       cache --rounds 5 --prefix-tokens 8000
 
 提示:
-  - 管理员固定渠道：token 末尾加 -<渠道ID>，例如 sk-xxxx-43
   - 指标口径：
       TTFT = 请求发出 → 第一个输出 token
       TPOT = (总耗时 - TTFT) / (输出 token 数 - 1)   平均每个后续 token 的耗时
@@ -140,14 +139,13 @@ def _claude_user_id(session=None):
     return "%s_account_%s_session_%s" % (base, uuid.uuid4(), sess)
 
 
-# 真实 Claude Code 的身份特征。取值来自抓包实测（cc_version=2.1.220.04c，见桌面
-# PolarDB-X_qwen3.8-max_原始请求响应_20260804/Claude请求详解_头与体.md 第 ③④ 节和 2.3 节）。
+# 真实 Claude Code 的身份特征。取值来自对真实客户端的抓包。
 # 严格网关不只看 6 个 x-stainless/UA 头，还会查 anthropic-beta 里有没有 claude-code-*
 # 以及 system 头两块是不是 CLI 的计费上报 + 身份声明；缺了就 403
 # "this endpoint only accepts requests from the official Claude Code CLI"。
 _CC_VERSION = "2.1.247.cfd"
 
-# 2026-08-27 抓包（claude-cli/2.1.247，见 ~/Desktop/claude抓包/）实测真实客户端只发 4~5 项：
+# 抓包（claude-cli/2.1.247）实测真实客户端只发 4~5 项：
 #   claude-code / interleaved-thinking / mid-conversation-system / effort [/ fallback-credit]
 # 这里保留更长的列表：多数是纯能力声明，"开了 beta 不填字段"不报错也没副作用，
 # 多声明几项能顺带探出上游对未知 beta 的容忍度。
@@ -209,26 +207,26 @@ def system_block(text: str, cache: bool):
 def apply_cc_fields(payload: dict, args) -> dict:
     """补齐真实 Claude Code 会发、而压测脚本原本不发的 body 字段。
 
-    ⭐ 为什么重要（2026-08-27 实测教训）：
+    ⭐ 为什么重要：
     脚本原本只伪装了 Claude Code 的「外壳」（UA / x-stainless-* / anthropic-beta /
     system 计费块），body 里却不发 thinking 和 output_config。结果是
     **压测报告说"该渠道可用"，用户一上真 Claude Code 就 400** —— 当天所有的 400
     都是 body 内容触发的，没有一个是请求头触发的。
 
-    三个字段各自的坑（抓包见 ~/Desktop/claude抓包/三份抓包的区别.md）：
+    三个字段各自的坑：
 
-    1) output_config.effort —— 真实 CC 默认发 "xhigh"，而智谱全线（官方
-       open.bigmodel.cn + 腾讯 tokenhub）只认 low/high/max，发 xhigh 直接
+    1) output_config.effort —— 真实 CC 默认发 "xhigh"，而部分上游
+       只认 low/high/max，发 xhigh 会直接报错，例如
        `[1210][该模型始终思考，不支持关闭思考；请使用 low、high 或 max。]`。
        注意这个报错文案完全误导：它说的是"关闭思考"，实际跟 thinking 无关。
 
     2) thinking.type —— 跨上游兼容性最差的字段，而且各家踩坑方向相反：
          老兼容层      拒 "adaptive"，只认 enabled/disabled
-         Kimi/Moonshot 反过来拒 "disabled"，报 only type=enabled is allowed
-         智谱 / 真 Claude  都接受
+         部分上游反过来拒 "disabled"，报 only type=enabled is allowed
+         真 Claude 及多数兼容实现 都接受
        真实 CC 发的是 "adaptive"，所以默认值取 adaptive 才测得准。
 
-    3) messages 里的 role:"system"（mid-conversation system）—— 2026-04 新 beta，
+    3) messages 里的 role:"system"（mid-conversation system）—— 较新的 beta，
        用来传"会话中途才变化的上下文"。标准协议 role 是枚举（只允许 user/assistant），
        老实现看到 system 直接 400。脚本原本在 anthropic-beta 里声明了这项能力却从不
        真的发，等于没测。
@@ -288,14 +286,12 @@ def cache_messages(bulk: str, tail: str, placement: str = "messages"):
     """构造缓存测试 messages。placement 决定稳定大块放哪。
 
     ⚠️ 历史结论已被推翻，别再当通用规律用：
-    本函数原先写死「大块**必须**放 messages，放 system 恒 0% 命中」，依据是
-    2026-08-04 PolarDB-X AI 网关 / qwen3.8-max 的实测——那边大块放 system 时每发
-    都记一笔 cache_creation 却从不读回，连逐字节相同的请求也是 read=0。
-    但 2026-08-27 用同一份 payload 复测真 Claude（claude-opus-5）和智谱官方
-    （open.bigmodel.cn/api/anthropic，glm-5.3-flash），**放 system 一样正常命中**
-    （抓包见 ~/Desktop/claude抓包/）。
+    本函数原先写死「大块**必须**放 messages，放 system 恒 0% 命中」，依据是某个
+    网关的实测——大块放 system 时每发都记一笔 cache_creation 却从不读回，
+    连逐字节相同的请求也是 read=0。
+    但用同一份 payload 复测真 Claude 和其它官方接口，**放 system 一样正常命中**。
 
-    所以那是 PolarDB-X 那个网关自己的实现缺陷，不是协议规律。
+    所以那是个别网关自己的实现缺陷，不是协议规律。
     保留 messages 为默认值（最保守、各家都认），但把 system 放法开放出来 ——
     用 --cache-placement both 跑一轮，就能直接诊断出「这个上游只认 messages 断点」
     这类缺陷，这比闷头用保守写法更有信息量。
@@ -474,7 +470,7 @@ def send_stream(url: str, token: str, payload: dict, timeout: int = 180) -> dict
         #      output_tokens 却不下发任何 delta，预算在思考结束前用完 → stop_reason=max_tokens
         #      且 output_tokens 恰好等于 max_tokens。调大 --max-tokens 即可，**降并发无效**。
         #   B. 上游静默失败（协议问题）：真的什么都没产出。
-        # 实测教训（2026-08-26）：旧版只报「空响应」三个字，害得人去跑并发梯度找容量拐点，
+        # 实测教训：旧版只报「空响应」三个字，害得人去跑并发梯度找容量拐点，
         # 而失败率根本不随并发变化（10/30/60 并发都约 50%）——白折腾一轮。
         out_tok = usage.get("output_tokens") or 0
         if stop_reason == "max_tokens":
@@ -574,8 +570,8 @@ def preflight(args, send_one, label="预检"):
 def _preflight_hint(args, err: str):
     """把已知的兼容性 400 翻译成人话 + 给出下一步。
 
-    这些都是 2026-08-27 实测踩过的坑，报错文案本身普遍误导，
-    不给提示的话很容易往错误方向排查（我第一次撞 1210 就往 thinking 查了半天）。
+    这些都是实测踩过的坑，报错文案本身普遍误导，
+    不给提示的话很容易往错误方向排查（比如撞 1210 时容易误以为是 thinking 的问题）。
     """
     e = str(err)
     effort = (getattr(args, "effort", None) or "xhigh").lower()
@@ -583,14 +579,14 @@ def _preflight_hint(args, err: str):
         print("  ↳ 提示：这个报错文案是误导的，跟 thinking 无关。")
         if effort == "xhigh":
             print("     真实原因通常是 output_config.effort=\"xhigh\" 不在上游白名单"
-                  "（智谱全线只认 low/high/max）。")
+                  "（部分上游只认 low/high/max）。")
             print("     重试：加 --effort high")
         else:
             print("     当前 effort=%s 已不是 xhigh，若仍报此错，试 --thinking enabled:2048"
                   % effort)
     elif "thinking" in e.lower():
         print("  ↳ 提示：thinking 字段不被接受。老实现只认 enabled/disabled，")
-        print("     Kimi/Moonshot 系则反过来拒 disabled。重试：--thinking enabled:2048"
+        print("     部分上游则反过来拒 disabled。重试：--thinking enabled:2048"
               " 或 --thinking none")
     elif "role" in e.lower() and getattr(args, "mid_conv_system", False):
         print("  ↳ 提示：上游不接受 messages 里的 role:\"system\"（老 schema 把 role 当枚举）。")
@@ -638,12 +634,12 @@ def fmt_usage(u: dict) -> str:
 def upstream_grade(u: dict) -> str:
     """按 usage 字段的丰富度给上游"成色"打标。
 
-    依据 2026-08-27 三方抓包（~/Desktop/claude抓包/三份抓包的区别.md）：
+    依据对多家接口的抓包对比：
     只有真 Claude 会返回 thinking_tokens 和 cache_creation 的 5m/1h 分档；
-    智谱官方有 signature_delta / service_tier 但没有这两个；
+    部分兼容实现有 signature_delta / service_tier 但没有这两个；
     浅层兼容实现则只给 input_tokens / output_tokens。
 
-    注意：signature_delta 不能用来判断"是不是真 Claude"——智谱官方也有。
+    注意：signature_delta 不能用来判断"是不是真 Claude"——部分兼容实现也有。
     """
     marks = []
     if (u.get("output_tokens_details") or {}).get("thinking_tokens") is not None:
@@ -779,8 +775,8 @@ def run_bench(args):
 def fake_tools(n: int):
     """伪造 n 个工具定义，用来把请求体撑到真实 Claude Code 的形态。
 
-    为什么必须带：2026-08-27 三份抓包实测，tools 占请求体 83~86%
-    （真 Claude 106 KB / 54 个，智谱官方 115 KB / 58 个）。
+    为什么必须带：抓包实测，tools 占请求体 83~86%
+    （约 100 KB 以上、50 多个工具）。
     不带 tools 的滚动测试，"省了多少钱"这个结论是虚的 —— 真实场景里最大的一块
     恰恰是 tools，它能不能进缓存直接决定成本模型。
     """
@@ -821,13 +817,13 @@ def run_roll(args):
         msgs = [大块(断点1)] [历史…] [上轮回复(断点2)] [本轮新问题]
                                           ↑ 每轮往后移，把新固定下来的历史圈进缓存
 
-    三种失败态要分开判（2026-08-27 三份抓包的真实形态）：
-      cache_read 恒 0        → 上游根本不支持缓存（onelinkai 连字段都不返回）
+    三种失败态要分开判（来自真实抓包的形态）：
+      cache_read 恒 0        → 上游根本不支持缓存（有的上游连字段都不返回）
       cache_read 恒定不变    → 只有固定断点生效，历史没进缓存 ← 最阴险，命中率看着很好看
-      cache_read 逐轮变大    → 正常（真 Claude 46,328→122,317；智谱 1,472→1,600）
+      cache_read 逐轮变大    → 正常（如 46,328→122,317）
 
     中间偶发单点 miss 属正常（多副本路由落到没有该缓存的副本），
-    真 Claude 第 23 发、智谱第 3 发都出现过，所以看"递增轮次占比"而不是"有没有 miss"。
+    真 Claude 和其它官方接口都出现过，所以看"递增轮次占比"而不是"有没有 miss"。
     """
     rows = roll_collect(args, verbose=True)
     if rows:
@@ -859,7 +855,7 @@ def roll_prepare(args, verbose=True, turns=None, tag="roll"):
     #
     # 早期版本把大块塞在 messages[0] 上打断点1、滚动断点当断点2，只有 2 个断点。
     # 那样测不出"上游认不认第 3 个断点"——而真实客户端用的正是第 3 个。
-    # 实测 tokenhub：2 断点布局下滚动缓存 109% 健康，换成真实的 3 断点布局后，
+    # 实测：某上游在 2 断点布局下滚动缓存 109% 健康，换成真实的 3 断点布局后，
     # 真实 Claude Code 会话里 cache_read 卡死 14 轮不动。测出来的是两回事。
     system_blocks = [
         {"type": "text", "text": _CC_BILLING},                       # system[0] 不打
@@ -905,7 +901,7 @@ ROLL_WARM_LEAD_S = 30
 
 
 def roll_warm(args, ctx, verbose=True, delay=None):
-    """预热：写入对后续请求可见有延迟（实测 DeepSeek 第1发就命中，真 Claude 第4发，智谱第7发）"""
+    """预热：写入对后续请求可见有延迟（实测有的上游第1发就命中，有的要到第4发甚至第7发）"""
     warm_n = getattr(args, "warmup", 2)
     if delay is None:
         delay = getattr(args, "delay", 1.5)
@@ -985,11 +981,11 @@ def roll_stats(rows):
     sum_input = sum(x["input"] for x in rows)
 
     # ⭐ 判据是"命中区增长 ÷ 历史增长"，不是"递增轮次占比"。
-    # 第一版用后者，被缓存块粒度坑了：DeepSeek 按 128 token 成块，而每轮只追加 ~25 token
+    # 第一版用后者，被缓存块粒度坑了：有的上游按 128 token 成块，而每轮只追加 ~25 token
     # （短问答 + max_tokens=64），要攒 5 轮才跨过一个块边界 → 序列看着"横盘"，
     # 实际 8 轮里历史涨了 178、命中区涨了 128，捕获率 72%，是健康的。
     # 冷启动那几轮也要剔掉：首轮必然 miss，算进基数会让捕获率虚高到 300%+
-    # （实测 DeepSeek 首轮 read=128、次轮 6,272，差值全被算成"增长"）。
+    # （实测某上游首轮 read=128、次轮 6,272，差值全被算成"增长"）。
     warm = next((i for i, x in enumerate(rows) if x["read"] >= x["total"] * 0.5), None)
     if warm is None or warm >= len(rows) - 1:
         warm = 0
@@ -1078,7 +1074,7 @@ def run_cache(args):
         return send_stream(args.url, args.token, apply_cc_fields(payload, args), args.timeout)
 
     # --cache-placement both：先做一次断点位置诊断，再按 messages 放法跑正式统计。
-    # 目的是识别「只认 messages 断点」这类上游缺陷（PolarDB-X 网关就是这样）。
+    # 目的是识别「只认 messages 断点」这类上游缺陷（个别网关就是这样）。
     if getattr(args, "cache_placement", "messages") == "both":
         print("[诊断] 对比断点放 messages / 放 system 两种写法（各发 4 次，取后 2 次）")
         verdict = {}
@@ -1495,7 +1491,7 @@ def run_report(args):
         progress("preflight", 1, 1)
 
     # ① 首字压测：并发
-    # 真实上游普遍有 RPM 限额（实测腾讯 tokenhub 是 60），不限速直接甩 100 个并发
+    # 真实上游普遍有 RPM 限额（实测有的上游只有 60），不限速直接甩 100 个并发
     # 会撞一墙 429——量到的不是首字延迟，是限流器的响应速度。--request-rate 给一个
     # 到达速率上限，池子仍是 --concurrency，实际在飞的请求数由两者中更紧的那个决定。
     rate = float("inf") if str(args.request_rate) == "inf" else float(args.request_rate)
@@ -1664,7 +1660,7 @@ def run_report(args):
             print("未命中构成: 逐出重写 %d · 无缓存迹象 %d · 错误 %d"
                   % (cache["rewrites"], cache["dead_miss"], nerr))
         # 有效样本太少时，命中率是拿零星几发算出来的，不能当结论用。
-        # 实测教训（2026-08-26）：50 发采样挂了 48 发，只剩 2 发有效，报告照样打出
+        # 实测教训：50 发采样挂了 48 发，只剩 2 发有效，报告照样打出
         # 「100% 命中」——数字本身没错，但拿它下结论是灾难性的。
         total_pts = len(pts)
         if cn < 10 or (total_pts and nerr > total_pts * 0.3):
@@ -1951,16 +1947,16 @@ def main():
     p.add_argument("--url", required=True, help="完整端点，如 https://host/v1/messages")
     # 密钥改为优先读环境变量 BENCH_API_KEY，避免出现在进程列表里；--token 仍兼容
     p.add_argument("--token", default=os.environ.get("BENCH_API_KEY", ""),
-                   help="密钥；推荐用环境变量 BENCH_API_KEY 传入，管理员固定渠道可加 -<渠道ID> 后缀")
+                   help="密钥；推荐用环境变量 BENCH_API_KEY 传入")
     p.add_argument("--profile", choices=("claude-code", "generic"), default="claude-code",
                    help="请求画像：claude-code=原行为(伪装 Claude Code)；generic=通用 Messages 兼容接口，"
                         "不带 Claude Code 专用头/system 块，thinking/effort 默认不发送")
-    p.add_argument("--model", default="glm-5.2")
+    p.add_argument("--model", default="claude-sonnet-4-5")
     p.add_argument("--max-tokens", type=int, default=2048,
                    help="单请求最大输出 token。推理模型的思考与可见正文共用这份预算，"
                         "且部分网关把推理 token 计进 output_tokens 却不下发任何 delta——"
                         "预算太小会在思考结束前耗尽，stop_reason=max_tokens 但一个字都收不到，"
-                        "被记成「空响应」假失败。别往下调，原因见手册「测推理模型前必读」")
+                        "被记成「空响应」假失败。别往下调，否则容易出现这类假失败")
     p.add_argument("--prefix-tokens", type=int, default=8000, help="system 前缀大小(粗估 token)")
     p.add_argument("--thinking-budget", type=int, default=0,
                    help="[兼容旧写法] 等价于 --thinking enabled:N；0=不使用。"
@@ -1968,14 +1964,14 @@ def main():
     p.add_argument("--thinking", default="adaptive",
                    help="thinking 字段：adaptive(默认，对齐真实 Claude Code) / "
                         "enabled:N / enabled / disabled / none(不发送)。"
-                        "老兼容层拒 adaptive，Kimi 系拒 disabled，换渠道必测")
+                        "老兼容层拒 adaptive，部分上游拒 disabled，换上游必测")
     p.add_argument("--effort", default="xhigh",
                    help="output_config.effort：xhigh(默认，对齐真实 Claude Code) / "
-                        "high / max / low / none(不发送)。⚠️ 智谱全线只认 low/high/max，"
+                        "high / max / low / none(不发送)。⚠️ 部分上游只认 low/high/max，"
                         "发 xhigh 会报 [1210]，但那个报错文案说的是「不支持关闭思考」，别被误导")
     p.add_argument("--mid-conv-system", action="store_true",
                    help="在 messages 末尾插一条 role:\"system\" 消息(mid-conversation "
-                        "system，2026-04 新 beta)。老实现把 role 当枚举，会直接 400")
+                        "system，较新的 beta)。老实现把 role 当枚举，会直接 400")
     p.add_argument("--no-preflight", action="store_true",
                    help="跳过开压前的单发预检（默认会先探一次，失败就中止，省得错误刷满整轮）")
     p.add_argument("--timeout", type=int, default=180)
@@ -2026,7 +2022,7 @@ def main():
     c.add_argument("--concurrency", type=int, default=1, help="并发数，1=顺序(命中率最高)")
     c.add_argument("--warmup", type=int, default=2,
                    help="预热次数(先写缓存，不计入统计)。默认 2：实测写入对后续请求可见有"
-                        "一发延迟，智谱官方前 4 发都是 cache_read=0，预热 1 次不够")
+                        "一发延迟，有的上游前 4 发都是 cache_read=0，预热 1 次不够")
     c.add_argument("--cache-placement", default="messages",
                    choices=("messages", "system", "both"),
                    help="稳定大块/断点放哪：messages(默认，兼容性最好) / system / "

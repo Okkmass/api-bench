@@ -93,8 +93,8 @@ _VISIBLE_DELTA_TYPES = (
     "response.refusal.delta",
 )
 
-# Providers disagree on the reasoning event name: DeepSeek official emits
-# reasoning_text, Tencent tokenhub and OpenAI emit reasoning_summary_text.
+# Providers disagree on the reasoning event name: some providers emit
+# reasoning_text while OpenAI and others emit reasoning_summary_text.
 _REASONING_DELTA_TYPES = (
     "response.reasoning_text.delta",
     "response.reasoning_summary_text.delta",
@@ -225,10 +225,10 @@ def build_payload(args, prefix, prompt, cache_key):
     # reasoning 有两种形状，真实 Codex 会按上游是不是 OpenAI 系发不同的那种：
     #   OpenAI 系   {"effort":"low","context":"all_turns"}
     #   其它上游    {"summary":"auto"}          ← 注意：没有 effort
-    # summary 决定推理要不要流式吐出来。抓包实测 tokenhub 吐了 1556 个
-    # reasoning_text.delta、DeepSeek 吐了 5473 个（推理占输出 48%）——
+    # summary 决定推理要不要流式吐出来。抓包实测有的上游一次请求吐了
+    # 上千个 reasoning_text.delta（推理占输出近一半）——
     # 不发 summary 的话上游可能压根不吐推理，量到的 TTFT/TPOT 就和真实场景对不上。
-    # 另外智谱系对 effort 有白名单，而真实 Codex 打它根本不发 effort，
+    # 另外部分上游对 effort 有白名单，而真实 Codex 打它根本不发 effort，
     # 硬发反而制造出真实场景不存在的失败。所以两个字段各自独立、都可不发。
     reasoning = {}
     if args.reasoning_effort:
@@ -717,7 +717,7 @@ def print_fingerprint(fingerprint):
     )
     print("口径: 同一前缀下 input_tokens 与块粒度一致，说明上游 tokenizer 与缓存实现同源。")
 
-    # 服务端注入检测。抓包实测 DeepSeek 有一轮请求体 74KB（约 22K token），
+    # 服务端注入检测。抓包实测有一轮请求体 74KB（约 22K token），
     # input_tokens 却报 123,066 —— 5.5 倍，因为那轮模型在服务端跑了 7 次 web 搜索，
     # usage 是内部多轮的累加。撞上这种情况时成本和缓存口径都会失真，必须告警，
     # 否则"按请求体估成本"会严重低估。
@@ -1060,8 +1060,8 @@ def print_cache_error_samples(rows, limit=5):
     """打印缓存阶段的错误原文 + 发生时刻。
 
     原先缓存阶段只报「失败 N」和分类计数，拿不到 HTTP body，也看不出错误是零散抖动
-    还是某个时刻起连续挂掉（后者是配额/限流闩死，性质完全不同）。实测 tokenhub
-    glm-5.3 曾出现 42/80 失败且全部集中在后半段，只看计数会误判成"缓存不稳"。
+    还是某个时刻起连续挂掉（后者是配额/限流闩死，性质完全不同）。实测曾出现
+    42/80 失败且全部集中在后半段，只看计数会误判成"缓存不稳"。
     """
     errors = [row for row in rows if row.get("status") == "error"]
     if not errors:
@@ -1471,7 +1471,7 @@ def run_cache(args):
     print_fingerprint(fingerprint)
 
     # 缓存键隔离性探针：同一前缀，换一个全新的 prompt_cache_key 再发一发。
-    # 抓包实测 tokenhub 开新会话、key 换了，第一发就命中 99.7% ——
+    # 抓包实测有的上游开新会话、key 换了，第一发就命中 99.7% ——
     # 说明它是按【内容前缀】缓存的，prompt_cache_key 形同虚设。
     # 这个属性直接影响网关的亲和路由值不值得做：上游要是根本不看 key，
     # 把同一会话粘到同一渠道的收益就小得多。
@@ -1576,7 +1576,7 @@ def run_report(args):
         print("[预检] 通过：首字 %.0fms" % ((pre.get("ttft") or 0) * 1000))
         progress("preflight", 1, 1)
 
-    # 真实上游普遍有 RPM 限额（实测腾讯 tokenhub 是 60），不限速直接甩 100 个并发
+    # 真实上游普遍有 RPM 限额（实测有的上游只有 60），不限速直接甩 100 个并发
     # 会撞一墙 429——量到的不是首字延迟，是限流器的响应速度。
     rate = str(getattr(args, "request_rate", "inf"))
     print("① 首字压测：并发 %d%s ..."
