@@ -1,0 +1,79 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>demo-model 压测报告</title><style>
+ :root{
+   --bg:#f2efe7; --surface:#fffdf8; --line:#ded8ca; --line2:#c9c2b0;
+   --ink:#22252a; --dim:#7b7566; --am:#b8560f; --cy:#0d7268; --bad:#b3261e;
+   --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,"Cascadia Code","DejaVu Sans Mono",monospace;
+ }
+ *{box-sizing:border-box}
+ body{margin:0;background:var(--bg);color:var(--ink);font:12.5px/1.5 var(--mono);
+      -webkit-font-smoothing:antialiased;
+      background-image:linear-gradient(#e4dfd2 1px,transparent 1px),
+                       linear-gradient(90deg,#e4dfd2 1px,transparent 1px);
+      background-size:26px 26px;background-position:-1px -1px}
+ .wrap{max-width:1080px;margin:0 auto;padding:0 26px 40px}
+ .head{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;
+       padding:28px 0 18px;flex-wrap:wrap}
+ h1{font-size:19px;margin:0;font-weight:600;letter-spacing:-.3px}
+ h1 span{color:var(--am)}
+ .sub{color:var(--dim);font-size:11px;word-break:break-all;text-align:right}
+ .rule{height:3px;background:linear-gradient(90deg,var(--am),var(--cy) 38%,var(--line) 78%)}
+ .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+        gap:1px;background:var(--line);border:1px solid var(--line);
+        border-top:none;margin:0 0 22px}
+ .card{background:var(--surface);padding:15px 17px 14px;position:relative;
+       animation:rise .5s cubic-bezier(.2,.7,.3,1) both;animation-delay:calc(var(--i)*65ms)}
+ .card::after{content:"";position:absolute;left:0;top:0;width:100%;height:2px;background:var(--line2)}
+ .card.am::after{background:var(--am)} .card.cy::after{background:var(--cy)}
+ .card.bad::after{background:var(--bad)}
+ .card-t{font-size:10.5px;color:var(--dim);letter-spacing:1.5px;margin-bottom:8px}
+ .card-v{font-size:29px;font-weight:600;line-height:1;letter-spacing:-1px;
+         font-variant-numeric:tabular-nums}
+ .card.am .card-v{color:var(--am)} .card.cy .card-v{color:var(--cy)}
+ .card.bad .card-v{color:var(--bad)}
+ .card-s{font-size:10.5px;color:var(--dim);margin-top:8px}
+ @keyframes rise{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:none}}
+ .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+ .panel{background:var(--surface);border:1px solid var(--line);padding:15px 17px 17px;
+        margin-bottom:16px;animation:rise .5s cubic-bezier(.2,.7,.3,1) both;animation-delay:.28s}
+ .panel h2{font-size:11.5px;margin:0 0 13px;color:var(--dim);font-weight:500;
+           letter-spacing:1.3px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+ .rollgrid{display:grid;grid-template-columns:1.05fr .95fr;gap:20px;align-items:start}
+ table,table.pt{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+ th,td,.pt th,.pt td{padding:5.5px 8px;text-align:right;font-size:11.5px;
+                     border-bottom:1px solid var(--line)}
+ th:first-child,td:first-child{text-align:left;color:var(--dim)}
+ th{color:var(--dim);font-weight:500;font-size:10px;letter-spacing:1px}
+ tr:last-child td{border-bottom:none}
+ tr:hover td{background:#f7f3e9}
+ .tp{font-size:11px;color:var(--dim);margin-top:11px;line-height:1.7}
+ .tp b{color:var(--ink);font-weight:600}
+ .chart{width:100%;height:auto;display:block;max-height:250px;overflow:visible}
+ .grid{stroke:#eae5d8;stroke-width:1}
+ .yl{fill:#96907f;font-size:9.5px;text-anchor:end;font-family:var(--mono)}
+ .xl{fill:#96907f;font-size:9.5px;text-anchor:middle;font-family:var(--mono)}
+ .draw{stroke-dasharray:4000;stroke-dashoffset:4000;animation:dash 1.5s .45s ease-out forwards}
+ @keyframes dash{to{stroke-dashoffset:0}}
+ .legend,.lgd{font-size:10.5px;color:var(--dim);margin-top:9px;line-height:1.8}
+ .legend i,.lgd i{display:inline-block;width:8px;height:8px;margin:0 4px 0 10px;
+                  vertical-align:middle}
+ .footer{font-size:10.5px;color:var(--dim);margin-top:18px;padding-top:15px;
+         border-top:1px solid var(--line);line-height:1.9}
+ .footer b{color:var(--ink)}
+ .tag{display:inline-block;padding:2px 9px;font-size:10px;letter-spacing:.6px;
+      border:1px solid currentColor}
+ .tag.ok{color:var(--cy)} .tag.warn{color:var(--am)} .tag.bad{color:var(--bad)}
+ .cache-table{margin-top:16px}.bad{color:var(--bad)}
+ @media(max-width:880px){.grid2,.rollgrid{grid-template-columns:1fr}.sub{text-align:left}}
+</style><body><div class="wrap">
+<div class="head"><h1>demo-model <span>压测报告</span></h1><div class="sub">http://127.0.0.1:18080/v1/responses · demo-model · 2026-10-19 19:21:56</div></div>
+<div class="rule"></div>
+<div class="cards"><div class="card am" style="--i:0"><div class="card-t">TTFT p50</div><div class="card-v">528ms</div><div class="card-s">并发 20 · p90 662ms</div></div><div class="card " style="--i:1"><div class="card-t">解码速度</div><div class="card-v">105</div><div class="card-s">tok/s 每流</div></div><div class="card " style="--i:2"><div class="card-t">成功率</div><div class="card-v">100%</div><div class="card-s">60 次请求 · 零失败</div></div><div class="card cy" style="--i:3"><div class="card-t">缓存命中率</div><div class="card-v">100%</div><div class="card-s">14/14 请求 · token 口径 86%</div></div><div class="card cy" style="--i:4"><div class="card-t">增量命中率</div><div class="card-v">86%</div><div class="card-s">8 轮滚动 · 累计省下 97%</div></div></div>
+<div class="grid2">
+ <div class="panel"><h2>① 首字压测 · 并发 20</h2><table><thead><tr><th>指标</th><th>p50</th><th>p90</th><th>p99</th><th>mean</th><th>min</th><th>max</th></tr></thead><tbody><tr><td>TTFT 首字</td><td>528ms</td><td>662ms</td><td>722ms</td><td>515ms</td><td>295ms</td><td>731ms</td></tr><tr><td>TPOT/token</td><td>10ms</td><td>10ms</td><td>10ms</td><td>10ms</td><td>9ms</td><td>10ms</td></tr><tr><td>总耗时</td><td>596ms</td><td>728ms</td><td>786ms</td><td>582ms</td><td>362ms</td><td>792ms</td></tr></tbody></table><div class="tp">请求吞吐 <b>28.30</b> req/s · 输出吞吐 <b>226</b> tok/s · 总墙钟 <b>2.1s</b> · 截断 0</div></div>
+ <div class="panel"><h2>② 缓存 · 持久性 · 连续 14s</h2><svg viewBox="0 0 500 230" class="chart"><line x1="42" y1="202" x2="490" y2="202" class="grid"/><text x="36" y="205" class="yl">0.0</text><line x1="42" y1="154.5" x2="490" y2="154.5" class="grid"/><text x="36" y="157.5" class="yl">0.2</text><line x1="42" y1="107" x2="490" y2="107" class="grid"/><text x="36" y="110" class="yl">0.5</text><line x1="42" y1="59.5" x2="490" y2="59.5" class="grid"/><text x="36" y="62.5" class="yl">0.8</text><line x1="42" y1="12" x2="490" y2="12" class="grid"/><text x="36" y="15" class="yl">1.0</text><text x="42" y="222" class="xl">0m</text><rect x="33.04" y="73.997" width="17.92" height="128.003" fill="#8fa8b8"/><rect x="33.0969" y="97.842" width="17.92" height="104.158" fill="#b8560f"/><rect x="65.0753" y="75.688" width="17.92" height="126.312" fill="#b8560f"/><rect x="97.0834" y="111.256" width="17.92" height="90.744" fill="#b8560f"/><rect x="129.214" y="110.895" width="17.92" height="91.105" fill="#b8560f"/><rect x="161.207" y="91.325" width="17.92" height="110.675" fill="#b8560f"/><rect x="193.165" y="133.315" width="17.92" height="68.685" fill="#b8560f"/><rect x="225.22" y="119.122" width="17.92" height="82.878" fill="#b8560f"/><rect x="257.209" y="52.128" width="17.92" height="149.872" fill="#b8560f"/><rect x="289.224" y="78.652" width="17.92" height="123.348" fill="#d9a35e"/><rect x="321.064" y="98.545" width="17.92" height="103.455" fill="#d9a35e"/><rect x="353.205" y="53.211" width="17.92" height="148.789" fill="#d9a35e"/><rect x="385.163" y="70.026" width="17.92" height="131.974" fill="#d9a35e"/><rect x="417.079" y="58.075" width="17.92" height="143.925" fill="#d9a35e"/><rect x="449.061" y="61.628" width="17.92" height="140.372" fill="#d9a35e"/></svg><div class="legend">纵轴=延迟(s) 横轴=分钟 ·<i style="background:#b8560f"></i>命中<i style="background:#d9a35e"></i>部分<i style="background:#cec7b6"></i>未命中<i style="background:#8fa8b8"></i>冷启动<i style="background:#b3261e"></i>错误 · 请求 100% / token 86% · 首次命中 0s</div></div>
+</div>
+<div class="panel"><h2>③ 滚动缓存 · 8 轮真实对话 · 历史逐轮累积<span class="tag ok">命中区随对话增长（捕获 86%），滚动缓存正常</span></h2><div class="rollgrid"><div><svg class="chart" viewBox="0 0 480 190"><line class="grid" x1="56" y1="12.0" x2="470" y2="12.0"/><text class="yl" x="50" y="15.0">17,085</text><line class="grid" x1="56" y1="50.0" x2="470" y2="50.0"/><text class="yl" x="50" y="53.0">12,814</text><line class="grid" x1="56" y1="88.0" x2="470" y2="88.0"/><text class="yl" x="50" y="91.0">8,542</text><line class="grid" x1="56" y1="126.0" x2="470" y2="126.0"/><text class="yl" x="50" y="129.0">4,271</text><line class="grid" x1="56" y1="164.0" x2="470" y2="164.0"/><text class="yl" x="50" y="167.0">0</text><polyline fill="none" stroke="#a9a294" stroke-width="1.5" stroke-dasharray="4 3" points="56.0,110.4 115.1,98.0 174.3,85.5 233.4,73.1 292.6,60.6 351.7,48.2 410.9,35.7 470.0,23.3"/><polyline class="draw" fill="none" stroke="#0d7268" stroke-width="2" points="56.0,110.6 115.1,98.2 174.3,85.7 233.4,73.3 292.6,60.8 351.7,48.3 410.9,48.3 470.0,35.9"/><circle cx="56.0" cy="110.6" r="2.5" fill="#0d7268"/><circle cx="115.1" cy="98.2" r="2.5" fill="#0d7268"/><circle cx="174.3" cy="85.7" r="2.5" fill="#0d7268"/><circle cx="233.4" cy="73.3" r="2.5" fill="#0d7268"/><circle cx="292.6" cy="60.8" r="2.5" fill="#0d7268"/><circle cx="351.7" cy="48.3" r="2.5" fill="#0d7268"/><circle cx="410.9" cy="48.3" r="2.5" fill="#0d7268"/><circle cx="470.0" cy="35.9" r="2.5" fill="#0d7268"/><text class="xl" x="56.0" y="182">1</text><text class="xl" x="115.1" y="182">2</text><text class="xl" x="174.3" y="182">3</text><text class="xl" x="233.4" y="182">4</text><text class="xl" x="292.6" y="182">5</text><text class="xl" x="351.7" y="182">6</text><text class="xl" x="410.9" y="182">7</text><text class="xl" x="470.0" y="182">8</text></svg><div class="lgd"><i style="background:#a9a294"></i>总输入(上下文全量)<i style="background:#0d7268"></i>命中区(缓存读回，不花钱)</div><div class="tp">第1轮起统计 · 历史增长 +9800 tok · 命中区捕获 86% · 累计省下 96.6%（87,360 → 实付 2,960）</div></div><div><table class="pt"><tr><th>轮次</th><th>总输入</th><th>付费</th><th>命中区</th><th>命中率</th></tr><tr><td>第1轮</td><td>6,020</td><td>20</td><td>6,000</td><td>100%</td></tr><tr><td>第2轮</td><td>7,420</td><td>20</td><td>7,400</td><td>100%</td></tr><tr><td>第3轮</td><td>8,820</td><td>20</td><td>8,800</td><td>100%</td></tr><tr><td>第4轮</td><td>10,220</td><td>20</td><td>10,200</td><td>100%</td></tr><tr><td>第5轮</td><td>11,620</td><td>20</td><td>11,600</td><td>100%</td></tr><tr><td>第6轮</td><td>13,020</td><td>20</td><td>13,000</td><td>100%</td></tr><tr><td>第7轮</td><td>14,420</td><td>1,420</td><td>13,000</td><td>90%</td></tr><tr><td>第8轮</td><td>15,820</td><td>1,420</td><td>14,400</td><td>91%</td></tr></table></div></div></div>
+<div class="footer">并发 20 × 60 请求, max_output_tokens=2048, 流式 · 缓存: 连续 14s/每 1s 一发, 前缀~8000 tok, 首次命中 0s · 明确写缓存 0 次, 无 cache_write 字段 0 次</div>
+</div></body></html>

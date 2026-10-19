@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.DS_Store
+# 本地跑出来的报告和明细（docs/demo/ 下的演示文件除外）
+/*.html
+/*.csv
+/*.json
